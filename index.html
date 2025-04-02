@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>전략 턴제 RPG 게임</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f4f4f4;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+
+    .game-container {
+      margin: 50px auto;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      width: 400px;
+    }
+
+    h2 {
+      color: #333;
+    }
+
+    .status {
+      margin-bottom: 20px;
+    }
+
+    .status p {
+      font-size: 18px;
+    }
+
+    button {
+      margin: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 5px;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    #turn-message {
+      margin-top: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #d9534f;
+      white-space: pre-line;
+    }
+
+    .bar-container {
+      margin-top: 10px;
+    }
+
+    .bar-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 5px;
+    }
+
+    .progress-bar {
+      width: 100%;
+      height: 20px;
+      background-color: #e0e0e0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .progress {
+      height: 100%;
+      background-color: #4CAF50;
+      width: 0%;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="game-container">
+    <div class="status">
+      <h2>플레이어 상태</h2>
+      <p>체력: <span id="player-health">150</span></p>
+    </div>
+
+    <div class="status">
+      <h2>적 상태</h2>
+      <p>체력: <span id="enemy-health">100</span></p>
+    </div>
+
+    <div class="bar-container">
+      <div class="bar-label">
+        <span>MP</span>
+        <span id="player-mana-label">50/50</span>
+      </div>
+      <div class="progress-bar">
+        <div id="player-mana-bar" class="progress"></div>
+      </div>
+
+      <div class="bar-label">
+        <span>SP</span>
+        <span id="player-sp-label">0/10</span>
+      </div>
+      <div class="progress-bar">
+        <div id="player-sp-bar" class="progress"></div>
+      </div>
+    </div>
+
+    <button id="attack-button">공격</button>
+    <button id="defend-button">방어</button>
+    <button id="heal-button">치유 (MP 10)</button>
+    <button id="power-attack-button">강력한 공격 (SP 10)</button>
+
+    <div id="turn-message">턴 시작!</div>
+  </div>
+
+  <script>
+    const MAX_PLAYER_HEALTH = 150;
+    let playerHealth = MAX_PLAYER_HEALTH;
+    let playerMana = 50;
+    let playerSP = 0;
+    let enemyHealth = 100;
+    let enemyAttackMultiplier = 1;
+    let enemyRevives = 3;
+    let temporaryHealth = 0;
+    let vampireDebuffTurns = 0;
+
+    const playerHealthElement = document.getElementById("player-health");
+    const enemyHealthElement = document.getElementById("enemy-health");
+    const playerManaBar = document.getElementById("player-mana-bar");
+    const playerManaLabel = document.getElementById("player-mana-label");
+    const playerSPBar = document.getElementById("player-sp-bar");
+    const playerSPLabel = document.getElementById("player-sp-label");
+    const turnMessage = document.getElementById("turn-message");
+
+    function updateHealth() {
+      playerHealthElement.textContent = playerHealth;
+      enemyHealthElement.textContent = enemyHealth;
+    }
+
+    function updateProgressBars() {
+      playerManaBar.style.width = (playerMana / 50) * 100 + "%";
+      playerManaLabel.textContent = `${playerMana}/50`;
+      playerSPBar.style.width = (playerSP / 10) * 100 + "%";
+      playerSPLabel.textContent = `${playerSP}/10`;
+    }
+
+    function rechargeResources() {
+      playerMana = Math.min(playerMana + 5, 50);
+      playerSP = Math.min(playerSP + 1, 10);
+    }
+
+    function attackEnemy() {
+      const damage = Math.round(Math.random() * 20) + 10;
+      enemyHealth -= damage;
+      let msg = `적에게 ${damage}의 피해를 입혔습니다.`;
+
+      if (enemyHealth <= 0) {
+        enemyHealth = 0;
+        msg += `\n적을 처치했습니다!`;
+        updateHealth();
+        updateProgressBars();
+        enemyRevive(msg);
+        return;
+      }
+
+      updateHealth();
+      rechargeResources();
+      updateProgressBars();
+      msg += `\nMP: +5, SP: +1`;
+      turnMessage.textContent = msg;
+      enemyTurn();
+    }
+
+    function defend() {
+      temporaryHealth = 20; // 실제 체력 증가 X
+      turnMessage.textContent = "방어! 임시 체력 20이 추가되었습니다.\nMP: +5, SP: +1";
+      rechargeResources();
+      updateProgressBars();
+      enemyTurn();
+    }
+
+    function heal() {
+      if (playerMana >= 10) {
+        const healAmount = Math.round(Math.random() * 20) + 10;
+        playerHealth = Math.min(playerHealth + healAmount, MAX_PLAYER_HEALTH);
+        playerMana -= 10;
+        rechargeResources();
+        updateHealth();
+        updateProgressBars();
+        turnMessage.textContent = `치유 성공! ${healAmount} 회복.\nMP: -10, SP: +1`;
+        enemyTurn();
+      } else {
+        turnMessage.textContent = "MP가 부족합니다.";
+      }
+    }
+
+    function powerAttack() {
+      if (playerSP >= 10) {
+        const damage = Math.round(Math.random() * 40) + 20;
+        enemyHealth -= damage;
+        playerSP -= 10;
+        let msg = `강력한 공격! ${damage} 피해를 입혔습니다.`;
+
+        if (enemyHealth <= 0) {
+          enemyHealth = 0;
+          updateHealth();
+          updateProgressBars();
+          msg += `\n적을 처치했습니다!`;
+          enemyRevive(msg);
+          return;
+        }
+
+        updateHealth();
+        rechargeResources();
+        updateProgressBars();
+        msg += `\nSP: -10, MP: +5`;
+        turnMessage.textContent = msg;
+        enemyTurn();
+      } else {
+        turnMessage.textContent = "SP가 부족합니다.";
+      }
+    }
+
+    function enemyTurn() {
+      const canVampireAttack = vampireDebuffTurns <= 0;
+      const isVampireAttack = Math.random() < 0.17 && canVampireAttack;
+      const isPowerAttack = Math.random() < 0.15;
+
+      let damage = isPowerAttack
+        ? Math.round(Math.random() * 25) + 20
+        : Math.round(Math.random() * 15) + 5;
+
+      damage = Math.round(damage * enemyAttackMultiplier);
+      let msg = "";
+
+      if (temporaryHealth > 0) {
+        if (temporaryHealth >= damage) {
+          temporaryHealth -= damage;
+          damage = 0;
+        } else {
+          damage -= temporaryHealth;
+          temporaryHealth = 0;
+        }
+        msg += "(임시 체력으로 피해 감소)\n";
+      }
+
+      playerHealth -= damage;
+
+      if (playerHealth <= 0) {
+        playerHealth = 0;
+        msg += `적의 ${isPowerAttack ? "강력한 " : ""}공격으로 ${damage} 피해를 입었습니다.\n당신은 쓰러졌습니다!`;
+        updateHealth();
+        updateProgressBars();
+        turnMessage.textContent = msg;
+        return;
+      } else {
+        msg += `적의 ${isPowerAttack ? "강력한 " : ""}공격! ${damage} 피해를 입었습니다.`;
+      }
+
+      if (isVampireAttack) {
+        const healAmount = Math.round(damage / 2);
+        enemyHealth += healAmount;
+        vampireDebuffTurns = 2;
+        msg += `\n적이 흡혈로 ${healAmount} 회복했습니다. (흡혈 디버프 2턴 시작)`;
+      } else if (!canVampireAttack && Math.random() < 0.17) {
+        msg += `\n(흡혈 디버프 중이라 흡혈을 사용할 수 없습니다)`;
+      }
+
+      if (temporaryHealth > 0) {
+        temporaryHealth = 0;
+        msg += `\n방어로 얻은 임시 체력이 사라졌습니다.`;
+      }
+
+      if (vampireDebuffTurns > 0) {
+        vampireDebuffTurns--;
+      }
+
+      updateHealth();
+      rechargeResources();
+      updateProgressBars();
+      turnMessage.textContent = msg;
+    }
+
+    function enemyRevive(prevMsg) {
+      if (enemyRevives > 0) {
+        enemyRevives--;
+        enemyAttackMultiplier += 0.1;
+        const newMaxHealth = 100 + (3 - enemyRevives) * 30;
+        enemyHealth = newMaxHealth;
+        updateHealth();
+        updateProgressBars();
+        turnMessage.textContent = `${prevMsg}\n적이 부활했습니다! 체력: ${enemyHealth}, 공격력 증가`;
+      } else {
+        turnMessage.textContent = `${prevMsg}\n적이 더 이상 부활할 수 없습니다. 승리!`;
+      }
+    }
+
+    document.getElementById("attack-button").addEventListener("click", attackEnemy);
+    document.getElementById("defend-button").addEventListener("click", defend);
+    document.getElementById("heal-button").addEventListener("click", heal);
+    document.getElementById("power-attack-button").addEventListener("click", powerAttack);
+  </script>
+</body>
+</html>
